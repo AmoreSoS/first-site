@@ -108,22 +108,47 @@ def start_keyboard():
         resize_keyboard=True
     )
 
-def offline_menu():
+# --- МЕНЮ ДЛЯ ОФФЛАЙН ---
+
+def offline_menu_unregistered():
+    # Только регистрация, пока нет ID
     return ReplyKeyboardMarkup(
         [
-            ["👁 Играть", "✍️ Регистрация"],
+            ["✍️ Регистрация"],
+            ["🔙 В меню"],
+        ],
+        resize_keyboard=True
+    )
+
+def offline_menu():
+    # Меню для уже зарегистрированных офлайн-гостей (без кнопки регистрации)
+    return ReplyKeyboardMarkup(
+        [
+            ["👁 Играть"],
             ["🧮 Мои баллы", "🏆 Турнирная таблица"],
             ["➕ Добавить баллы", "ℹ️ Правила игры"],
         ],
         resize_keyboard=True
     )
 
+# --- МЕНЮ ДЛЯ ОНЛАЙН ---
+
+def online_menu_unregistered():
+    # Только регистрация и назад
+    return ReplyKeyboardMarkup(
+        [
+            ["✍️ Регистрация"],
+            ["🔙 В меню"],
+        ],
+        resize_keyboard=True
+    )
+
 def online_menu():
+    # Меню для зарегистрированных онлайн-участников (без регистрации)
     return ReplyKeyboardMarkup(
         [
             ["Играть"],
             ["Мои баллы", "Турнирная таблица"],
-            ["✍️ Регистрация"],
             ["🔙 В меню"],
         ],
         resize_keyboard=True
@@ -193,20 +218,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+    tg_id = update.effective_user.id
 
     if text == "Я на вечеринке":
         context.user_data["mode"] = "offline"
+
+        # Если уже зарегистрирован — сразу нормальное меню без регистрации
+        if tg_id in tg_to_user and users.get(tg_to_user[tg_id], {}).get("mode") == "offline":
+            kb = offline_menu()
+        else:
+            kb = offline_menu_unregistered()
+
         await update.message.reply_text(
             "Отлично! Добро пожаловать на вечеринку 🎉",
-            reply_markup=offline_menu(),
+            reply_markup=kb,
         )
         return MAIN_MENU
 
     if text == "Я на удаленке":
         context.user_data["mode"] = "online"
+
+        if tg_id in tg_to_user and users.get(tg_to_user[tg_id], {}).get("mode") == "online":
+            kb = online_menu()
+        else:
+            kb = online_menu_unregistered()
+
         await update.message.reply_text(
             "Привет, онлайн-герой ⚡️",
-            reply_markup=online_menu()
+            reply_markup=kb,
         )
         return MAIN_MENU
 
