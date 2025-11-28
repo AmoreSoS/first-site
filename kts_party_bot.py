@@ -108,6 +108,9 @@ def start_keyboard():
         resize_keyboard=True
     )
 
+def is_admin_id(tg_id: int) -> bool:
+    return tg_id in ADMIN_IDS
+
 # --- МЕНЮ ДЛЯ ОФФЛАЙН ---
 
 def offline_menu_unregistered():
@@ -120,16 +123,24 @@ def offline_menu_unregistered():
         resize_keyboard=True
     )
 
-def offline_menu():
-    # Меню для уже зарегистрированных офлайн-гостей (без кнопки регистрации)
-    return ReplyKeyboardMarkup(
-        [
+def offline_menu_for(tg_id: int):
+    """Меню для уже зарегистрированных офлайн-гостей.
+    Для админа — с доп. кнопками, для обычного — без них.
+    """
+    if is_admin_id(tg_id):
+        buttons = [
             ["👁 Играть"],
             ["🧮 Мои баллы", "🏆 Турнирная таблица"],
-            ["➕ Добавить баллы", "ℹ️ Правила игры"],
-        ],
-        resize_keyboard=True
-    )
+            ["➕ Добавить баллы", "Список участников"],
+            ["ℹ️ Правила игры"],
+        ]
+    else:
+        buttons = [
+            ["👁 Играть"],
+            ["🧮 Мои баллы", "🏆 Турнирная таблица"],
+            ["ℹ️ Правила игры"],
+        ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 # --- МЕНЮ ДЛЯ ОНЛАЙН ---
 
@@ -143,16 +154,24 @@ def online_menu_unregistered():
         resize_keyboard=True
     )
 
-def online_menu():
-    # Меню для зарегистрированных онлайн-участников (без регистрации)
-    return ReplyKeyboardMarkup(
-        [
+def online_menu_for(tg_id: int):
+    """Меню для зарегистрированных онлайн-участников.
+    Для админа — с кнопкой списка участников.
+    """
+    if is_admin_id(tg_id):
+        buttons = [
+            ["Играть"],
+            ["Мои баллы", "Турнирная таблица"],
+            ["Список участников"],
+            ["🔙 В меню"],
+        ]
+    else:
+        buttons = [
             ["Играть"],
             ["Мои баллы", "Турнирная таблица"],
             ["🔙 В меню"],
-        ],
-        resize_keyboard=True
-    )
+        ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
 def online_games_menu():
     return ReplyKeyboardMarkup(
@@ -220,12 +239,11 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     tg_id = update.effective_user.id
 
-    if text == "Я на вечеринке":
+        if text == "Я на вечеринке":
         context.user_data["mode"] = "offline"
 
-        # Если уже зарегистрирован — сразу нормальное меню без регистрации
         if tg_id in tg_to_user and users.get(tg_to_user[tg_id], {}).get("mode") == "offline":
-            kb = offline_menu()
+            kb = offline_menu_for(tg_id)
         else:
             kb = offline_menu_unregistered()
 
@@ -239,7 +257,7 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mode"] = "online"
 
         if tg_id in tg_to_user and users.get(tg_to_user[tg_id], {}).get("mode") == "online":
-            kb = online_menu()
+            kb = online_menu_for(tg_id)
         else:
             kb = online_menu_unregistered()
 
@@ -308,10 +326,12 @@ async def save_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data()
 
+    kb = online_menu_for(tg_id) if mode == "online" else offline_menu_for(tg_id)
+
     await update.message.reply_text(
         f"Готово! Вы зарегистрированы как {name}.\n"
         f"Ваш ID: #{uid}",
-        reply_markup=online_menu() if mode == "online" else offline_menu()
+        reply_markup=kb
     )
     return MAIN_MENU
 
@@ -707,6 +727,7 @@ async def send_emoji_question(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def game_emoji_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
+    # выход в меню игр
     if text.strip().lower() == "🔙 в меню".lower():
         await update.message.reply_text("Меню игр:", reply_markup=online_games_menu())
         return MAIN_MENU
@@ -715,17 +736,40 @@ async def game_emoji_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     emoji_str, ans = EMOJI_GAME_QUESTIONS[idx]
     user, uid = get_user_by_tg(update)
 
-    if normalize_answer(text) == normalize_answer(ans):
+    user_answer = normalize_answer(text)
+    correct_main = normalize_answer(ans)
+
+    # базовый вариант
+    correct_variants = {correct_main}
+
+    # ===== ДОПОЛНИТЕЛЬНЫЕ ВАРИАНТЫ =====
+
+    # 1) Первый вопрос — «Сто шагов назад»
+    if idx == 0:
+        correct_variants.add(normalize_answer("100 шагов назад"))
+
+    # 2) Второй вопрос — «Дожди пистолеты»
+    if idx == 1:
+        correct_variants.add(normalize_answer("дожди-пистолеты"))
+        correct_variants.add(normalize_answer("дожди - пистолеты"))
+
+    # 3) Третий вопрос — «Солнышко в руках»
+    if idx == 2:
+        correct_variants.add(normalize_answer("солнышко"))
+
+    # ===================================
+
+    # проверяем правильность
+    if user_answer in correct_variants:
         user["points"] += 2
         save_data()
         await update.message.reply_text("Правильно! Держи + 2 балла 🎶✨")
-        context.user_data["emoji_index"] = idx + 1
-        return await send_emoji_question(update, context)
     else:
-        await update.message.reply_text(
-            "Кажется, это не та песня, попробуй ещё раз 🙂"
-        )
-        return GAME_EMOJI_Q
+        await update.message.reply_text("Кажется, это не та песня 😅")
+
+    # переход к следующему вопросу в любом случае
+    context.user_data["emoji_index"] = idx + 1
+    return await send_emoji_question(update, context)
 
 # =============================
 #      ОФФЛАЙН «ИГРАТЬ»
@@ -746,10 +790,10 @@ async def play_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "— Найти все 6 QR-кодов 🔍 (везде)\n"
         "— Угадать что ИИ, а что реальность 🎭 (3 этаж)\n"
         "— Отличить настоящие новости от выдуманных ⚡ (3 этаж)\n"
-        "— Попасть в кольцо 💍 (3 этаж)\n"
+        "— Попасть кольцом 💍 (3 этаж)\n"
         "— Поиграть в алкошахматы 🍷♟ (2 этаж)\n\n"
         "После выполнения подходите к волонтёрам — они начислят баллы.",
-        reply_markup=offline_menu()
+        reply_markup=offline_menu_for(update.effective_user.id)
     )
     return MAIN_MENU
 
@@ -772,7 +816,7 @@ async def rules_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "— Проси волонтёров начислить баллы\n"
         "— Следи за турнирной таблицей\n"
         "— В конце вечера объявим победителей 🏆",
-        reply_markup=offline_menu()
+        reply_markup=offline_menu_for(update.effective_user.id)
     )
     return MAIN_MENU
 
@@ -791,6 +835,47 @@ async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove()
     )
     return ADMIN_ADD_ID
+async def admin_list_participants(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = update.effective_user.id
+    if tg_id not in ADMIN_IDS:
+        await update.message.reply_text("Эта функция доступна только организаторам.")
+        return MAIN_MENU
+
+    # Собираем списки
+    offline_lines = []
+    online_lines = []
+
+    for uid, info in users.items():
+        line = f"#{uid} — {info['name']} — {info['points']} баллов"
+        if info["mode"] == "offline":
+            offline_lines.append(line)
+        elif info["mode"] == "online":
+            online_lines.append(line)
+
+    if not offline_lines:
+        offline_text = "Офлайн-участников пока нет."
+    else:
+        offline_text = "ОФЛАЙН-УЧАСТНИКИ:\n" + "\n".join(offline_lines)
+
+    if not online_lines:
+        online_text = "Онлайн-участников пока нет."
+    else:
+        online_text = "ОНЛАЙН-УЧАСТНИКИ:\n" + "\n".join(online_lines)
+
+    text = offline_text + "\n\n" + online_text
+
+    # Подбираем меню под режим админа
+    user, uid = get_user_by_tg(update)
+    if user:
+        if user["mode"] == "online":
+            kb = online_menu_for(tg_id)
+        else:
+            kb = offline_menu_for(tg_id)
+    else:
+        kb = start_keyboard()
+
+    await update.message.reply_text(text, reply_markup=kb)
+    return MAIN_MENU
 
 async def admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -838,15 +923,20 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Игрок с таким ID пропал. Начните заново.")
         return MAIN_MENU
 
-    users[uid]["points"] += delta
+        users[uid]["points"] += delta
     save_data()
+
+    admin_tg_id = update.effective_user.id
+    kb = offline_menu_for(admin_tg_id) if users[uid]["mode"] == "offline" else online_menu_for(admin_tg_id)
 
     await update.message.reply_text(
         f"Готово! {users[uid]['name']} (ID #{uid}) теперь имеет {users[uid]['points']} баллов.",
-        reply_markup=offline_menu() if users[uid]["mode"] == "offline" else online_menu()
+        reply_markup=kb
     )
     context.user_data.pop("admin_target_uid", None)
     return MAIN_MENU
+
+
 
 # =============================
 #      ВОЗВРАТ В МЕНЮ
@@ -854,12 +944,19 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сначала пытаемся понять режим из сохранённых данных
-    user, uid = get_user_by_tg(update)
+        user, uid = get_user_by_tg(update)
+    tg_id = update.effective_user.id
     if user:
         if user["mode"] == "online":
-            await update.message.reply_text("Меню онлайн-игры:", reply_markup=online_menu())
+            await update.message.reply_text(
+                "Меню онлайн-игры:",
+                reply_markup=online_menu_for(tg_id)
+            )
         else:
-            await update.message.reply_text("Меню:", reply_markup=offline_menu())
+            await update.message.reply_text(
+                "Меню:",
+                reply_markup=offline_menu_for(tg_id)
+            )
         return MAIN_MENU
 
     # Если ещё не зарегистрирован
@@ -920,6 +1017,10 @@ def main():
 
                 # Админ
                 MessageHandler(filters.Regex("^➕ Добавить баллы$"), admin_add_start),
+                MessageHandler(filters.Regex("^Список участников$"), admin_list_participants),
+
+                # Назад
+                MessageHandler(filters.Regex("^🔙 В меню$"), back_to_menu),
 
                 # Назад
                 MessageHandler(filters.Regex("^🔙 В меню$"), back_to_menu),
