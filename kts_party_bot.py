@@ -279,13 +279,13 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =============================
 #         РЕГИСТРАЦИЯ
 # =============================
-
 async def registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Введите ваше имя и фамилию:",
         reply_markup=ReplyKeyboardRemove()
     )
     return REG_NAME
+
 
 async def save_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global next_uid
@@ -356,6 +356,59 @@ async def save_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     )
     return REG_BRACELET
+
+
+async def save_bracelet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    tg_id = update.effective_user.id
+
+    # Разрешаем только кнопки
+    if text not in ("🔴", "🔵"):
+        await update.message.reply_text(
+            "Пожалуйста, выбери браслет кнопкой: 🔴 или 🔵."
+        )
+        return REG_BRACELET
+
+    # UID игрока, которого регистрируем
+    uid = context.user_data.get("reg_uid")
+    if not uid:
+        # fallback — если что-то пошло не так
+        if tg_id in tg_to_user:
+            uid = tg_to_user[tg_id]
+        else:
+            await update.message.reply_text(
+                "Не удалось найти игрока. Попробуйте снова /start."
+            )
+            return MAIN_MENU
+
+    user = users.get(uid)
+    if not user:
+        await update.message.reply_text(
+            "Ошибка: игрок не найден. Попробуйте снова /start."
+        )
+        return MAIN_MENU
+
+    # Сохраняем команду
+    if text == "🔴":
+        user["team"] = "red"
+        team_text = "красной команде 🔴"
+    else:
+        user["team"] = "blue"
+        team_text = "синей команде 🔵"
+
+    users[uid] = user
+    save_data()
+
+    # очищаем промежуточное состояние
+    context.user_data.pop("reg_uid", None)
+
+    await update.message.reply_text(
+        f"Отлично, ты в {team_text}!\n"
+        f"Твой ID: #{uid}",
+        reply_markup=offline_menu_for(tg_id)
+    )
+    return MAIN_MENU
+
 
 # =============================
 #    ПРОСМОТР БАЛЛОВ
