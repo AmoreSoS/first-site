@@ -946,10 +946,15 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
 #      ВОЗВРАТ В МЕНЮ
 # =============================
 
+# =============================
+#      ВОЗВРАТ В МЕНЮ
+# =============================
+
 async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Сначала пытаемся понять режим из сохранённых данных
-        user, uid = get_user_by_tg(update)
+    user, uid = get_user_by_tg(update)
     tg_id = update.effective_user.id
+
     if user:
         if user["mode"] == "online":
             await update.message.reply_text(
@@ -969,6 +974,7 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=start_keyboard()
     )
     return CHOOSING_LOCATION
+
 
 # =============================
 #          FALLBACK
