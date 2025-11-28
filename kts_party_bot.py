@@ -905,6 +905,7 @@ async def admin_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Эта функция доступна только организаторам.")
         return MAIN_MENU
 
+    # очищаем прошлый выбор
     context.user_data.pop("admin_target_uid", None)
 
     await update.message.reply_text(
@@ -958,11 +959,12 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return MAIN_MENU
 
+    # парсим дельту
     try:
         delta = int(text)
     except ValueError:
         await update.message.reply_text(
-            "Нужно ввести целое число (например: 5 или -2). Попробуйте ещё раз."
+            "Нужно ввести ЦЕЛОЕ число (например: 5 или -2). Попробуйте ещё раз."
         )
         return ADMIN_ADD_VALUE
 
@@ -973,7 +975,7 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop("admin_target_uid", None)
         return MAIN_MENU
 
-    # гарантируем, что points — это число
+    # гарантируем, что points — число
     old_points_raw = users[uid].get("points", 0)
     try:
         old_points = int(old_points_raw)
@@ -984,7 +986,7 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
     users[uid]["points"] = new_points
     save_data()
 
-    # меню для админа
+    # меню для АДМИНА, не игрока
     admin_tg_id = update.effective_user.id
     kb = offline_menu_for(admin_tg_id) if users[uid].get("mode") == "offline" else online_menu_for(admin_tg_id)
 
@@ -999,116 +1001,6 @@ async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     context.user_data.pop("admin_target_uid", None)
     return MAIN_MENU
-
-async def admin_top_teams(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    tg_id = update.effective_user.id
-    if tg_id not in ADMIN_IDS:
-        await update.message.reply_text("Эта функция доступна только организаторам.")
-        return MAIN_MENU
-
-    # Собираем только офлайн-игроков с браслетами
-    red = []
-    blue = []
-
-    for uid, info in users.items():
-        if info.get("mode") != "offline":
-            continue
-        team = info.get("team")
-        if team == "red":
-            red.append((uid, info["name"], info["points"]))
-        elif team == "blue":
-            blue.append((uid, info["name"], info["points"]))
-
-    red.sort(key=lambda x: x[2], reverse=True)
-    blue.sort(key=lambda x: x[2], reverse=True)
-
-    red_top = red[:5]
-    blue_top = blue[:5]
-
-    def format_team(title, lst, emoji):
-        if not lst:
-            return f"{title} ({emoji}):\nПока нет участников."
-        lines = [f"{title} ({emoji}):"]
-        for i, (uid, name, pts) in enumerate(lst, start=1):
-            lines.append(f"{i}. {name} (#{uid}) — {pts} баллов")
-        return "\n".join(lines)
-
-    text_red = format_team("Красная команда", red_top, "🔴")
-    text_blue = format_team("Синяя команда", blue_top, "🔵")
-
-    text = text_red + "\n\n" + text_blue
-
-    # подбираем правильное меню
-    user, uid = get_user_by_tg(update)
-    if user and user["mode"] == "online":
-        kb = online_menu_for(tg_id)
-    else:
-        kb = offline_menu_for(tg_id)
-
-    await update.message.reply_text(text, reply_markup=kb)
-    return MAIN_MENU
-
-
-async def admin_add_get_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    if text.startswith("#"):
-        text = text[1:]
-
-    if not text.isdigit():
-        await update.message.reply_text(
-            "Нужно число (ID игрока). Попробуйте ещё раз."
-        )
-        return ADMIN_ADD_ID
-
-    uid = int(text)
-    if uid not in users:
-        await update.message.reply_text("Игрок с таким ID не найден.")
-        return ADMIN_ADD_ID
-
-    if users[uid]["mode"] != "offline":
-        await update.message.reply_text(
-            "Этот игрок не относится к офлайн-режиму (нужен офлайн-игрок)."
-        )
-        return ADMIN_ADD_ID
-
-    context.user_data["admin_target_uid"] = uid
-    await update.message.reply_text(
-        f"Выбрали: {users[uid]['name']} (ID #{uid}).\n"
-        "Введите, сколько баллов начислить (можно отрицательное число):"
-    )
-    return ADMIN_ADD_VALUE
-
-async def admin_add_get_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-    if "admin_target_uid" not in context.user_data:
-        await update.message.reply_text("Цель не выбрана, начните заново.")
-        return MAIN_MENU
-
-    try:
-        delta = int(text)
-    except ValueError:
-        await update.message.reply_text("Нужно целое число. Попробуйте ещё раз.")
-        return ADMIN_ADD_VALUE
-
-    uid = context.user_data["admin_target_uid"]
-    if uid not in users:
-        await update.message.reply_text("Игрок с таким ID пропал. Начните заново.")
-        return MAIN_MENU
-
-        users[uid]["points"] += delta
-    save_data()
-
-    admin_tg_id = update.effective_user.id
-    kb = offline_menu_for(admin_tg_id) if users[uid]["mode"] == "offline" else online_menu_for(admin_tg_id)
-
-    await update.message.reply_text(
-        f"Готово! {users[uid]['name']} (ID #{uid}) теперь имеет {users[uid]['points']} баллов.",
-        reply_markup=kb
-    )
-    context.user_data.pop("admin_target_uid", None)
-    return MAIN_MENU
-
-
 
 # =============================
 #      ВОЗВРАТ В МЕНЮ
