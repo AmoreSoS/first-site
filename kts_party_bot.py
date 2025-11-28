@@ -239,9 +239,11 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     tg_id = update.effective_user.id
 
-        if text == "Я на вечеринке":
+    # ОФФЛАЙН
+    if text == "Я на вечеринке":
         context.user_data["mode"] = "offline"
 
+        # Если человек уже был зарегистрирован
         if tg_id in tg_to_user and users.get(tg_to_user[tg_id], {}).get("mode") == "offline":
             kb = offline_menu_for(tg_id)
         else:
@@ -253,6 +255,7 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return MAIN_MENU
 
+    # ОНЛАЙН
     if text == "Я на удаленке":
         context.user_data["mode"] = "online"
 
@@ -267,6 +270,7 @@ async def choose_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return MAIN_MENU
 
+    # Если нажали что-то другое
     await update.message.reply_text(
         "Пожалуйста, выберите один из вариантов.",
         reply_markup=start_keyboard(),
