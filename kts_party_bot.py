@@ -1102,6 +1102,96 @@ async def fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return MAIN_MENU
 
 # =============================
+#   АДМИН: СПИСОК УЧАСТНИКОВ
+#       И ТОП КОМАНД
+# =============================
+
+async def admin_list_participants(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = update.effective_user.id
+    if tg_id not in ADMIN_IDS:
+        await update.message.reply_text("Эта функция доступна только организаторам.")
+        return MAIN_MENU
+
+    offline_lines = []
+    online_lines = []
+
+    for uid, info in users.items():
+        line = f"#{uid} — {info['name']} — {info.get('points', 0)} баллов"
+        if info.get("mode") == "offline":
+            offline_lines.append(line)
+        elif info.get("mode") == "online":
+            online_lines.append(line)
+
+    if not offline_lines:
+        offline_text = "ОФЛАЙН-УЧАСТНИКИ:\nПока нет участников."
+    else:
+        offline_text = "ОФЛАЙН-УЧАСТНИКИ:\n" + "\n".join(offline_lines)
+
+    if not online_lines:
+        online_text = "ОНЛАЙН-УЧАСТНИКИ:\nПока нет участников."
+    else:
+        online_text = "ОНЛАЙН-УЧАСТНИКИ:\n" + "\n".join(online_lines)
+
+    text = offline_text + "\n\n" + online_text
+
+    # подбираем меню под админа
+    user, uid = get_user_by_tg(update)
+    if user and user.get("mode") == "online":
+        kb = online_menu_for(tg_id)
+    else:
+        kb = offline_menu_for(tg_id)
+
+    await update.message.reply_text(text, reply_markup=kb)
+    return MAIN_MENU
+
+
+async def admin_top_teams(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tg_id = update.effective_user.id
+    if tg_id not in ADMIN_IDS:
+        await update.message.reply_text("Эта функция доступна только организаторам.")
+        return MAIN_MENU
+
+    red = []
+    blue = []
+
+    for uid, info in users.items():
+        if info.get("mode") != "offline":
+            continue
+        team = info.get("team")
+        if team == "red":
+            red.append((uid, info["name"], info.get("points", 0)))
+        elif team == "blue":
+            blue.append((uid, info["name"], info.get("points", 0)))
+
+    red.sort(key=lambda x: x[2], reverse=True)
+    blue.sort(key=lambda x: x[2], reverse=True)
+
+    red_top = red[:5]
+    blue_top = blue[:5]
+
+    def format_team(title, lst, emoji):
+        if not lst:
+            return f"{title} ({emoji}):\nПока нет участников."
+        lines = [f"{title} ({emoji}):"]
+        for i, (uid, name, pts) in enumerate(lst, start=1):
+            lines.append(f"{i}. {name} (#{uid}) — {pts} баллов")
+        return "\n".join(lines)
+
+    text_red = format_team("Красная команда", red_top, "🔴")
+    text_blue = format_team("Синяя команда", blue_top, "🔵")
+
+    text = text_red + "\n\n" + text_blue
+
+    user, uid = get_user_by_tg(update)
+    if user and user.get("mode") == "online":
+        kb = online_menu_for(tg_id)
+    else:
+        kb = offline_menu_for(tg_id)
+
+    await update.message.reply_text(text, reply_markup=kb)
+    return MAIN_MENU
+
+# =============================
 #            MAIN
 # =============================
 
