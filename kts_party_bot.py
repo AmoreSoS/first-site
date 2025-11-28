@@ -23,7 +23,7 @@ if not TOKEN:
     raise RuntimeError("Не найден TELEGRAM_BOT_TOKEN в переменных окружения.")
 
 # Админы
-ADMIN_IDS = {455103834}
+ADMIN_IDS = {455103834, 420322968, 276249332, 338466748, 273240174}
 
 # Файл хранения данных
 DATA_FILE = "party_data.json"
